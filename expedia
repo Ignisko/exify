@@ -1,0 +1,195 @@
+#.1
+
+# Selenium imports
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+import selenium.common.exceptions as selexcept
+
+# Pandas imports
+import pandas as pd
+from datetime import datetime
+import os.path
+import re
+import sys
+import glob
+
+# Time and datetime
+import time
+
+# Set the chromedriver path
+webdriver_path = "C:\Users\Złomek\Downloads\chromedriver_win32/chromedriver.exe"
+
+# Open the Chrome window
+browser = webdriver.Chrome(executable_path=webdriver_path)
+
+# Set Round Trip type path
+return_ticket = "//label[@id='flight-type-roundtrip-label-hp-flight']"
+
+#2 
+
+import time
+from selenium.webdriver.common.keys import Keys
+
+def ticket_chooser(ticket):
+    try:
+        ticket_type = browser.find_element_by_xpath(ticket)
+        ticket_type.click()
+    except Exception as e:
+        pass
+
+def more_details(details):
+    try:
+        details_type = browser.find_element_by_xpath(details)
+        details_type.click()
+    except Exception as e:
+        pass
+
+def dep_country_chooser(dep_country):
+    fly_from = browser.find_element_by_xpath("//input[@id='flight-origin-hp-flight']")
+    time.sleep(3)
+    fly_from.clear()
+    time.sleep(3)
+    fly_from.send_keys('  ' + dep_country)
+    time.sleep(3)
+    first_item = browser.find_element_by_xpath("//a[@id='aria-option-0']")
+    time.sleep(3)
+    first_item.click()
+
+def arrival_country_chooser(arrival_country):
+    fly_to = browser.find_element_by_xpath("//input[@id='flight-destination-hp-flight']")
+    time.sleep(3)
+    fly_to.clear()
+    time.sleep(3)
+    fly_to.send_keys('  ' + arrival_country)
+    time.sleep(3)
+    first_item = browser.find_element_by_xpath("//a[@id='aria-option-0']")
+    time.sleep(3)
+    first_item.click()
+
+def dep_date_chooser(month, day, year):
+    dep_date_button = browser.find_element_by_xpath("//input[@id='flight-departing-hp-flight']")
+    dep_date_button.clear()
+    dep_date_button.send_keys(str(month) + "/" + str(day) + "/" + str(year))
+
+def return_date_chooser(month, day, year):
+    return_date_button = browser.find_element_by_xpath("//input[@id='flight-returning-hp-flight']")
+    for i in range(11):
+        return_date_button.send_keys(Keys.BACKSPACE)
+    return_date_button.send_keys(str(month) + "/" + str(day) + "/" + str(year))
+
+
+#3. 
+def ProcessJourney(journeyDetails, i):
+    ChooseFlight(journeyDetails, i)
+    DataProcessing()
+    AmendTimeAndDate()
+    SaveDfToCsv(journeyDetails, i)
+    
+    # Customization: Perform additional operations for a specific case
+    if journeyDetails['departure_city'] == 'Warsaw' and journeyDetails['arrival_city'] == 'Singapore':
+        # Perform some special operations or calculations
+        # Example: Calculate the total travel time for the journey
+        total_travel_time = journeyDetails['arrival_time'] - journeyDetails['departure_time']
+        journeyDetails['total_travel_time'] = total_travel_time
+    
+    # Continue with other operations or customizations if needed
+
+
+#4. 
+
+def DataProcessing():
+    global df
+    df = df[0:0]
+    number_element_to_ignore = 0   
+    
+    # Departure times
+    dep_times = browser.find_elements_by_xpath("//span[@data-test-id='departure-time']")
+    dep_times_list = [value.text for value in dep_times]
+    
+    # Arrival times
+    arr_times = browser.find_elements_by_xpath("//span[@data-test-id='arrival-time']")
+    arr_times_list = [value.text for value in arr_times]
+    
+    # Airline name
+    airlines = browser.find_elements_by_xpath("//span[@data-test-id='airline-name']")
+    airlines_list = [value.text for value in airlines]
+        
+    # Durations
+    durations = browser.find_elements_by_xpath("//span[@data-test-id='duration']")
+    durations_list = [value.text for value in durations]
+    
+    # Stops
+    stops = browser.find_elements_by_xpath("//span[@class='number-stops']")
+    stops_list = [value.text for value in stops]
+    
+    # Layovers
+    layovers = browser.find_elements_by_xpath("//span[@data-test-id='layover-airport-stops']")
+    layovers_list = [value.text for value in layovers]
+    
+    # Prices
+    prices = browser.find_elements_by_xpath("//span[@data-test-id='listing-price-dollars']")
+    price_list = [value.text for value in prices]
+    
+    # Last flight to scrape according to the price differences (here we choose multiply by 2)  
+    last_flight_index = CheckLastFlightIndexByPrice(price_list, 2)
+    
+    # Generate flights to ignore according to the last_flight_index
+    bad_indexes = GenerateBadIndex(dep_times_list, last_flight_index)
+
+    # Delete the non-relevant flights
+    for i in range(len(bad_indexes)):
+        dep_times_list.pop(int(bad_indexes[i]))
+        arr_times_list.pop(int(bad_indexes[i]))
+    
+    # Insert data to our DataFrame
+    for i in range(last_flight_index):
+        try:
+            df.loc[i, 'departure_time'] = dep_times_list[i]
+        except Exception as e:
+            pass
+        try:
+            df.loc[i, 'arrival_time'] = arr_times_list[i]
+        except Exception as e:
+            pass
+        try:
+            df.loc[i, 'airline'] = airlines_list[i]
+        except Exception as e:
+            pass
+        try:
+            df.loc[i, 'duration'] = durations_list[i]
+        except Exception as e:
+            pass
+        try:
+            df.loc[i, 'stops'] = stops_list[i]
+        except Exception as e:
+            pass
+        try:
+            df.loc[i, 'layovers'] = layovers_list[i]
+        except Exception as e:
+            pass
+        try:
+            df.loc[i, 'price'] = price_list[i]
+        except Exception as e:
+            pass
+        try:
+            # Adding flight details data
+            number_element_to_ignore = AddFlightDetailsData(i, stops_list, bad_indexes, number_element_to_ignore)
+        except Exception as e:
+            pass
+#Replace the AddingFlightDetails function call with AddFlightDetailsData or the appropriate function or code that adds flight details data.
+
+
+#5.
+
+import os
+
+def SaveDfToCsv(journeyDetails, i):
+    [folderPath, conc_date] = GetPathForExcelsOutPut(journeyDetails, i)
+    documents_folder = os.path.expanduser("~/Documents")
+    output_folder = os.path.join(documents_folder, folderPath)
+    os.makedirs(output_folder, exist_ok=True)
+    file_name = os.path.join(output_folder, f"{conc_date}_{dt.datetime.today().strftime('%y%m%d-%H%M%S')}.csv")
+    df['departure_date'] = GetDepartDateUsingFolderName(conc_date)  # Update with appropriate function
+    df['arrival_date'] = GetReturnDateUsingFolderName(conc_date)  # Update with appropriate function
+    df.to_csv(file_name, index=False)
