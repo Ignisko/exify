@@ -1,0 +1,49 @@
+
+import requests
+from lxml import etree
+import json
+
+# Define the URL
+url = "https://www.expedia.com/Flights-Search?=one-key-onboarding-dialog&d1=2023-12-27&flight-type=on&fromDate=12%2F27%2F2023&leg1=from%3AWarsaw%20%28WAW%20-%20Frederic%20Chopin%29%2Cto%3ASingapore%20%28SIN%20-%20Changi%29%2Cdeparture%3A12%2F27%2F2023TANYT&mode=search&options=cabinclass%3Aeconomy&passengers=children%3A0%2Cadults%3A1%2Cseniors%3A0%2Cinfantinlap%3AY&trip=oneway"
+
+# Send GET request
+response = requests.get(url)
+
+# Check response status code
+if response.status_code == 200:
+    # Extract the HTML content from the response
+    html_content = response.content
+
+    # Parse the HTML content using LXML
+    parser = etree.HTMLParser()
+    tree = etree.fromstring(html_content, parser)
+
+    # Define XPaths for the details you need
+    title_xpath = "//title/text()"
+    heading_xpath = "//h1/text()"
+
+    # Extract the desired details using XPaths
+    title = tree.xpath(title_xpath)[0]
+    heading = tree.xpath(heading_xpath)[0]
+
+    # Print the extracted details
+    print("Title:", title)
+    print("Heading:", heading)
+
+    # Store the extracted details as a dictionary
+    data = {
+        "title": title,
+        "heading": heading
+    }
+
+    # Specify the file path where you want to save the JSON file
+    file_path = 'output.json'
+
+    # Save the data as JSON
+    with open(file_path, 'w') as json_file:
+        json.dump(data, json_file, indent=4)
+
+    print("Data saved successfully to", file_path)
+
+else:
+    print("Request failed with status code:", response.status_code)
