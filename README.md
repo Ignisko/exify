@@ -1,2 +1,2 @@
 # exify
-exchange programs infosite (SGH version)
+flights for exchange students
