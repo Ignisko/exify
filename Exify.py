@@ -1,74 +1,55 @@
-from time import sleep
-from selenium import webdriver
-from bs4 import BeautifulSoup
+import requests
 import pandas as pd
+from bs4 import BeautifulSoup
 
-def start_web_driver():
-    driver = webdriver.Chrome()
-    print("WebDriver started.")
-    return driver
+def fetch_html_with_crawlbase(url, token):
+    api_url = f'https://api.crawlbase.com/?token=azxyXSavgH1TA3YFDTn9cg&url=https%3A%2F%2Fgithub.com%2Fcrawlbase-source%3Ftab%3Drepositories'
+    response = requests.get(api_url)
+    if response.status_code == 200:
+        return response.text
+    else:
+        print(f"Failed to fetch data: {response.status_code}")
+        return None
 
-def navigate_to_url(driver, start_airport, destination_airport='SIN', date='2023-12-15'):
-    url = f'https://www.kayak.sg/flights/{start_airport}-{destination_airport}/{date}-flexible-3days'
-    driver.get(url)
-    sleep(5)
-
-def scrape_data(driver):
-    flight_rows = driver.find_elements_by_xpath('//div[@class="inner-grid  keel-grid"]')
+def parse_flight_data(html):
+    soup = BeautifulSoup(html, 'html.parser')
+    flight_rows = soup.find_all('div', class_='inner-grid  keel-grid')
     prices = []
     airlines = []
 
     for row in flight_rows:
-        elementHTML = row.get_attribute('outerHTML')
-        elementSoup = BeautifulSoup(elementHTML, 'html.parser')
-        
         # Scrape price
-        t_price = elementSoup.find("div", {"class": "f8F1-price-text-container"})
-        if t_price:
-            price = t_price.find("span", {"class": "f8F1-price-text"})
-            if price:
-                prices.append(price.text)
+        t_price = row.find("div", class_="f8F1-price-text-container")
+        price = t_price.find("span", class_="f8F1-price-text").text if t_price else "N/A"
+        prices.append(price)
         
         # Scrape airline
-        t_airline = elementSoup.find("div", {"class": "J0g6-labels-grp"})
-        if t_airline:
-            airline = t_airline.find("span", {"class": "J0g6-operator-text"})
-            if airline:
-                airlines.append(airline.text)
+        t_airline = row.find("div", class_="J0g6-labels-grp")
+        airline = t_airline.find("span", class_="J0g6-operator-text").text if t_airline else "N/A"
+        airlines.append(airline)
 
     return prices, airlines
 
 if __name__ == '__main__':
-    print("Starting script...")
-    driver = start_web_driver()
-
+    token = 'your_crawlbase_token_here'  # Replace with your actual token
     start_airports = ['KRK', 'WAW', 'WMI']
     destination_airport = 'CTU'
+    date = '2023-12-15'
     
-    # Initialize these lists to store all scraped data
     all_prices = []
     all_airlines = []
 
     for start_airport in start_airports:
-        print(f"Trying for airport {start_airport}")
-        navigate_to_url(driver, start_airport, destination_airport)
-        
-        # Scrape data for each airport
-        prices, airlines = scrape_data(driver)
-        print(f"Prices: {prices}")
-        print(f"Airlines: {airlines}")
+        url = f'https://www.kayak.sg/flights/{start_airport}-{destination_airport}/{date}-flexible-3days'
+        html = fetch_html_with_crawlbase(url, token)
+        if html:
+            prices, airlines = parse_flight_data(html)
+            all_prices.extend(prices)
+            all_airlines.extend(airlines)
 
-        # Extend the all_prices and all_airlines lists with newly scraped data
-        all_prices.extend(prices)
-        all_airlines.extend(airlines)
-
-    # Create a DataFrame and save to CSV
     df = pd.DataFrame({
         'Price': all_prices,
         'Airline': all_airlines
     })
 
     df.to_csv('flight_data.csv', index=False)
-    
-    print("Exiting...")
-    driver.quit()
